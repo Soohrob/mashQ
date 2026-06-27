@@ -52,13 +52,24 @@
     font-size:12px;letter-spacing:.42em;text-transform:uppercase;
     color:var(--ink-soft);font-weight:600;padding-left:.42em;
   }
+  .topbar-actions{display:flex;gap:10px;}
   .icon-btn{
     width:44px;height:44px;border:1px solid var(--line);border-radius:50%;
     background:var(--surface);color:var(--ink);display:grid;place-items:center;
-    cursor:pointer;transition:transform .15s ease,background .3s ease,border-color .3s ease;
+    cursor:pointer;transition:transform .15s ease,background .3s ease,border-color .3s ease;position:relative;
   }
   .icon-btn:active{transform:scale(.9);}
   .icon-btn svg{width:20px;height:20px;}
+  /* sync status dot on the account button */
+  .acct-btn .dot{
+    position:absolute;right:5px;bottom:5px;width:11px;height:11px;border-radius:50%;
+    background:var(--ink-soft);border:2px solid var(--surface);transition:background .3s ease;
+  }
+  .acct-btn.s-local .dot{display:none;}
+  .acct-btn.s-synced .dot{background:#10b981;}
+  .acct-btn.s-offline .dot{background:#f59e0b;}
+  .acct-btn.s-syncing .dot{background:#3b82f6;animation:pulse 1s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 
   /* ---------- Views ---------- */
   .view{flex:1 1 auto;display:none;flex-direction:column;min-height:0;}
@@ -165,9 +176,43 @@
     position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 110px);transform:translateX(-50%) translateY(20px);
     background:var(--accent);color:var(--accent-ink);padding:12px 22px;border-radius:14px;
     font-size:14px;font-weight:700;letter-spacing:.04em;opacity:0;pointer-events:none;
-    transition:opacity .25s ease,transform .25s ease;z-index:50;white-space:nowrap;box-shadow:var(--shadow);
+    transition:opacity .25s ease,transform .25s ease;z-index:80;white-space:nowrap;box-shadow:var(--shadow);
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ---------- Overlays (auth + account) ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    display:none;align-items:center;justify-content:center;padding:24px;z-index:70;
+  }
+  .overlay.show{display:flex;}
+  .sheet{
+    width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);
+    border-radius:24px;padding:26px 24px;box-shadow:var(--shadow);
+  }
+  .sheet h2{margin:0 0 4px;font-size:23px;font-weight:800;letter-spacing:-.02em;}
+  .sheet .sub2{margin:0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.45;}
+  .in{
+    width:100%;background:var(--bg);border:1px solid var(--line);border-radius:14px;
+    padding:14px 16px;font-size:16px;color:var(--ink);font-family:inherit;outline:none;margin-bottom:10px;
+  }
+  .in:focus{border-color:var(--ink-soft);}
+  .btn-primary{
+    width:100%;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);
+    padding:15px;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.02em;transition:transform .15s ease,opacity .2s ease;
+  }
+  .btn-primary:active{transform:scale(.98);}
+  .btn-primary:disabled{opacity:.55;}
+  .btn-ghost{
+    width:100%;border:0;background:transparent;color:var(--ink-soft);
+    padding:12px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;
+  }
+  .msg{font-size:13px;margin:2px 0 12px;min-height:17px;color:var(--ink-soft);}
+  .msg.err{color:#dc2626;}
+  .msg.ok{color:#059669;}
+  .acct-row{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--line);font-size:14px;}
+  .acct-row span:first-child{color:var(--ink-soft);}
+  .acct-row span:last-child{font-weight:700;}
 </style>
 </head>
 <body>
@@ -176,7 +221,10 @@
   <!-- Top bar -->
   <div class="topbar">
     <div class="wordmark">mashQ</div>
-    <button class="icon-btn" id="themeBtn" aria-label="Toggle theme"></button>
+    <div class="topbar-actions">
+      <button class="icon-btn acct-btn s-local" id="acctBtn" aria-label="Account"><span class="dot"></span></button>
+      <button class="icon-btn" id="themeBtn" aria-label="Toggle theme"></button>
+    </div>
   </div>
 
   <!-- ===== Tracker view ===== -->
@@ -235,95 +283,136 @@
   </nav>
 
 </div>
+
+<!-- ===== Auth overlay ===== -->
+<div class="overlay" id="authOverlay">
+  <div class="sheet">
+    <h2 id="authTitle">Welcome back</h2>
+    <p class="sub2" id="authSub">Sign in to keep your push-ups consistent across all your devices.</p>
+    <input class="in" id="authEmail" type="email" inputmode="email" autocomplete="email" placeholder="Email" />
+    <input class="in" id="authPass" type="password" autocomplete="current-password" placeholder="Password" />
+    <div class="msg" id="authMsg"></div>
+    <button class="btn-primary" id="authSubmit">Sign in</button>
+    <button class="btn-ghost" id="authToggle">New here? Create an account</button>
+    <button class="btn-ghost" id="authClose">Maybe later</button>
+  </div>
+</div>
+
+<!-- ===== Account overlay ===== -->
+<div class="overlay" id="acctOverlay">
+  <div class="sheet">
+    <h2>Account</h2>
+    <p class="sub2" id="acctEmail"></p>
+    <div class="acct-row"><span>Sync status</span><span id="acctStatus">—</span></div>
+    <div class="acct-row" style="border-bottom:0;"><span>Entries stored</span><span id="acctCount">0</span></div>
+    <button class="btn-primary" id="acctSync" style="margin-top:16px;">Sync now</button>
+    <button class="btn-ghost" id="acctSignOut">Sign out</button>
+    <button class="btn-ghost" id="acctClose">Close</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
+<!-- Supabase JS SDK (only needed for cross-device sync; app still works offline without it) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (function(){
   "use strict";
-  const KEY = "pushup_counter_v1";
 
-  /* ---------- State ---------- */
-  // sets: [{id, count, ts}]  (ts = epoch ms)
-  // resets: [ts]  (manual "New Day" markers — bank only sums sets after the latest reset that lands today)
+  /* ===================== Cloud config ===================== */
+  const SUPABASE_URL = "https://chiqwmjvqiabwrxposwn.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNoaXF3bWp2cWlhYndyeHBvc3duIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1ODE5MTMsImV4cCI6MjA5ODE1NzkxM30.FUVYAs0joiyJZE7l6WOrD3mx4fFOl_Clp99nzE4ZO7I";
+  // SDK loads from a CDN; if offline on first launch it just won't be there — app runs local-only.
+  const SB = (window.supabase && SUPABASE_URL) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+  let session = null;       // current Supabase auth session (null = signed out)
+  let realtimeChan = null;  // live subscription to this user's rows
+  let syncState = "local";  // local | syncing | synced | offline
+
+  /* ===================== Local state ===================== */
+  const KEY = "pushup_counter_v1";
+  // sets:   [{id, count, ts}]            ts = epoch ms
+  // resets: [{id, ts}]                   manual "New Day" markers
   let state = load();
 
   function load(){
     try{
       const raw = JSON.parse(localStorage.getItem(KEY));
-      if(raw && Array.isArray(raw.sets)) return {sets:raw.sets, resets:raw.resets||[], dark:!!raw.dark};
+      if(raw && Array.isArray(raw.sets)){
+        // migrate older resets stored as bare timestamps -> {id, ts}
+        const resets = (raw.resets||[]).map(r => (typeof r === "number") ? {id:"reset-"+r, ts:r} : r);
+        return {sets:raw.sets, resets, dark:!!raw.dark};
+      }
     }catch(e){}
     return {sets:[], resets:[], dark: window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches};
   }
   function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+  function uid(prefix){ return prefix+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,8); }
 
-  /* ---------- Date helpers ---------- */
+  /* ===================== Date helpers ===================== */
   const pad = n => String(n).padStart(2,"0");
   function dayKey(d){ d=new Date(d); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
   function startOfDay(d){ d=new Date(d); d.setHours(0,0,0,0); return d.getTime(); }
   function todayKey(){ return dayKey(Date.now()); }
 
   function bankFloor(){
-    // latest manual reset that falls on today, else midnight today
     const t0 = startOfDay(Date.now());
-    const todayResets = state.resets.filter(ts => ts >= t0);
-    return todayResets.length ? Math.max(...todayResets) : t0;
+    const todayResets = state.resets.filter(r => r.ts >= t0);
+    return todayResets.length ? Math.max.apply(null, todayResets.map(r=>r.ts)) : t0;
   }
-  function bankTotal(){
-    const floor = bankFloor();
-    return state.sets.filter(s => s.ts >= floor).reduce((a,s)=>a+s.count,0);
-  }
-  function bankSetCount(){
-    const floor = bankFloor();
-    return state.sets.filter(s => s.ts >= floor).length;
-  }
+  function bankTotal(){ const f=bankFloor(); return state.sets.filter(s=>s.ts>=f).reduce((a,s)=>a+s.count,0); }
+  function bankSetCount(){ const f=bankFloor(); return state.sets.filter(s=>s.ts>=f).length; }
 
-  /* ---------- DOM ---------- */
+  /* ===================== DOM ===================== */
   const $ = id => document.getElementById(id);
   const bankTotalEl = $("bankTotal"), bankDateEl = $("bankDate"), bankSetsEl = $("bankSets");
   const amount = $("amount");
+  const reportsActive = () => $("reportsView").classList.contains("active");
 
   const SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
   const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+  const PERSON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
 
-  /* ---------- Theme ---------- */
+  /* ===================== Theme ===================== */
   function applyTheme(){
     document.documentElement.setAttribute("data-theme", state.dark ? "dark" : "light");
     $("themeBtn").innerHTML = state.dark ? SUN : MOON;
   }
   $("themeBtn").addEventListener("click", ()=>{ state.dark = !state.dark; save(); applyTheme(); });
 
-  /* ---------- Toast ---------- */
+  /* ===================== Toast ===================== */
   let toastTimer;
   function toast(msg){
     const t=$("toast"); t.textContent=msg; t.classList.add("show");
     clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),1600);
   }
 
-  /* ---------- Render tracker ---------- */
+  /* ===================== Render ===================== */
   function renderBank(animate){
-    const total = bankTotal();
-    bankTotalEl.textContent = total;
+    bankTotalEl.textContent = bankTotal();
     if(animate){ bankTotalEl.classList.remove("pop"); void bankTotalEl.offsetWidth; bankTotalEl.classList.add("pop"); }
     const sc = bankSetCount();
     bankSetsEl.textContent = sc===0 ? "No sets yet" : (sc + (sc===1?" set logged":" sets logged"));
     bankDateEl.textContent = new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
   }
+  function renderAll(){ renderBank(false); if(reportsActive()) renderReport(); }
 
-  /* ---------- Logging ---------- */
+  /* ===================== Logging ===================== */
   function logSet(n){
     n = Math.floor(n);
     if(!n || n<=0){ amount.focus(); return; }
-    state.sets.push({id:Date.now()+"-"+Math.random().toString(36).slice(2,6), count:n, ts:Date.now()});
+    const e = {id:uid("set"), count:n, ts:Date.now()};
+    state.sets.push(e);
     save();
     amount.value="";
     renderBank(true);
-    if($("reportsView").classList.contains("active")) renderReport();
+    if(reportsActive()) renderReport();
     toast("+"+n+" banked");
+    pushOne({id:e.id, kind:"set", count:e.count, ts:e.ts});
   }
 
   $("logForm").addEventListener("submit", e=>{ e.preventDefault(); logSet(parseInt(amount.value,10)); });
 
-  // quick chips
   document.querySelectorAll(".chip.add").forEach(c=>{
     c.addEventListener("click", ()=>{
       const cur = parseInt(amount.value,10)||0;
@@ -336,14 +425,16 @@
   $("newDayBtn").addEventListener("click", ()=>{
     if(bankTotal()===0){ toast("Bank already empty"); return; }
     if(!confirm("Archive today's bank and start a fresh count?")) return;
-    state.resets.push(Date.now());
+    const r = {id:uid("reset"), ts:Date.now()};
+    state.resets.push(r);
     save();
     amount.value="";
     renderBank(true);
     toast("New day started");
+    pushOne({id:r.id, kind:"reset", count:0, ts:r.ts});
   });
 
-  /* ---------- Reports ---------- */
+  /* ===================== Reports ===================== */
   const dayPick = $("dayPick"), monthPick = $("monthPick");
   let repMode = "day";
 
@@ -367,8 +458,7 @@
       $("sumCap").textContent = "Day Total";
       const key = dayPick.value || todayKey();
       const sets = state.sets.filter(s => dayKey(s.ts)===key).sort((a,b)=>b.ts-a.ts);
-      const total = sets.reduce((a,s)=>a+s.count,0);
-      $("sumBig").textContent = total;
+      $("sumBig").textContent = sets.reduce((a,s)=>a+s.count,0);
       if(!sets.length){ list.innerHTML = '<div class="empty">No push-ups logged on this day.</div>'; return; }
       list.innerHTML = sets.map(s=>(
         '<div class="row"><div class="l"><span class="when">'+fmtTime(s.ts)+'</span>'+
@@ -377,12 +467,11 @@
       )).join("");
     } else {
       $("sumCap").textContent = "Month Total";
-      const ym = monthPick.value || todayKey().slice(0,7); // YYYY-MM
+      const ym = monthPick.value || todayKey().slice(0,7);
       const byDay = {};
       state.sets.forEach(s=>{ const k=dayKey(s.ts); if(k.slice(0,7)===ym){ byDay[k]=(byDay[k]||0)+s.count; } });
       const days = Object.keys(byDay).sort((a,b)=>b.localeCompare(a));
-      const total = days.reduce((a,k)=>a+byDay[k],0);
-      $("sumBig").textContent = total;
+      $("sumBig").textContent = days.reduce((a,k)=>a+byDay[k],0);
       if(!days.length){ list.innerHTML = '<div class="empty">No push-ups logged this month.</div>'; return; }
       list.innerHTML = days.map(k=>{
         const d=new Date(k+"T00:00:00");
@@ -402,7 +491,7 @@
     }
   }
 
-  /* ---------- Nav ---------- */
+  /* ===================== Nav ===================== */
   document.querySelectorAll(".nav button").forEach(b=>{
     b.addEventListener("click", ()=>{
       const id=b.dataset.view;
@@ -412,24 +501,184 @@
     });
   });
 
-  /* ---------- Midnight auto-reset ---------- */
+  /* ===================== Midnight auto-reset ===================== */
   let lastSeenDay = todayKey();
   function checkMidnight(){
     const now = todayKey();
-    if(now !== lastSeenDay){
-      lastSeenDay = now;
-      renderBank(false); // bank now sums the new day automatically
-      if($("reportsView").classList.contains("active")) renderReport();
-    }
+    if(now !== lastSeenDay){ lastSeenDay = now; renderAll(); }
   }
   setInterval(checkMidnight, 30000);
-  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) checkMidnight(); });
 
-  /* ---------- Init ---------- */
+  /* ===================== Cloud sync ===================== */
+  // local entries flattened to the cloud row shape
+  function localEntries(){
+    return state.sets.map(s=>({id:s.id, kind:"set", count:s.count, ts:s.ts}))
+      .concat(state.resets.map(r=>({id:r.id, kind:"reset", count:0, ts:r.ts})));
+  }
+  // entries -> DB rows (stamped with the signed-in user + ISO timestamps)
+  function toRows(entries){
+    return entries.map(e=>({ id:e.id, user_id:session.user.id, kind:e.kind, count:e.count||0, ts:new Date(e.ts).toISOString() }));
+  }
+  // merge a remote row into local state; returns true if it was new
+  function addRemoteRow(row){
+    const ts = new Date(row.ts).getTime();
+    if(row.kind === "reset"){
+      if(!state.resets.some(r=>r.id===row.id)){ state.resets.push({id:row.id, ts}); return true; }
+    } else {
+      if(!state.sets.some(s=>s.id===row.id)){ state.sets.push({id:row.id, count:row.count, ts}); return true; }
+    }
+    return false;
+  }
+
+  function setSync(s){
+    syncState = s;
+    const b = $("acctBtn");
+    b.className = "icon-btn acct-btn s-"+s;
+    const labels = {local:"Not signed in", syncing:"Syncing…", synced:"Synced", offline:"Offline — will sync later"};
+    const st = $("acctStatus"); if(st) st.textContent = labels[s] || s;
+  }
+
+  // Pull everything, merge in both directions (pure union by id — nothing is ever deleted)
+  async function reconcile(){
+    if(!SB || !session) return;
+    setSync("syncing");
+    try{
+      const { data, error } = await SB.from("entries").select("*");
+      if(error) throw error;
+      let changed = false;
+      const remoteIds = new Set();
+      (data||[]).forEach(row=>{ remoteIds.add(row.id); if(addRemoteRow(row)) changed = true; });
+      const toPush = localEntries().filter(e => !remoteIds.has(e.id));
+      if(toPush.length){
+        const { error: upErr } = await SB.from("entries").upsert(toRows(toPush));
+        if(upErr) throw upErr;
+      }
+      if(changed){ save(); renderAll(); }
+      setSync("synced");
+    }catch(e){ console.warn("reconcile failed:", e.message||e); setSync("offline"); }
+  }
+
+  // Push a single new entry immediately; if it fails (offline) reconcile will catch it later
+  async function pushOne(entry){
+    if(!SB || !session) return;
+    setSync("syncing");
+    try{
+      const { error } = await SB.from("entries").upsert(toRows([entry]));
+      if(error) throw error;
+      setSync("synced");
+    }catch(e){ console.warn("push failed:", e.message||e); setSync("offline"); }
+  }
+
+  // Live updates from this user's other devices
+  function subscribeRealtime(){
+    if(!SB || !session) return;
+    if(realtimeChan){ SB.removeChannel(realtimeChan); realtimeChan = null; }
+    realtimeChan = SB.channel("entries-"+session.user.id)
+      .on("postgres_changes",
+        { event:"INSERT", schema:"public", table:"entries", filter:"user_id=eq."+session.user.id },
+        payload=>{ if(addRemoteRow(payload.new)){ save(); renderAll(); toast("Synced from another device"); } })
+      .subscribe();
+  }
+
+  /* ===================== Auth UI ===================== */
+  let authMode = "in";
+  function openAuth(){ $("authOverlay").classList.add("show"); $("authEmail").focus(); }
+  function closeAuth(){ $("authOverlay").classList.remove("show"); $("authMsg").textContent=""; $("authMsg").className="msg"; $("authPass").value=""; }
+  function setAuthMode(m){
+    authMode = m;
+    $("authTitle").textContent = m==="in" ? "Welcome back" : "Create your account";
+    $("authSub").textContent   = m==="in" ? "Sign in to sync your push-ups across devices."
+                                          : "One account keeps your data consistent on every device.";
+    $("authSubmit").textContent = m==="in" ? "Sign in" : "Create account";
+    $("authToggle").textContent = m==="in" ? "New here? Create an account" : "Have an account? Sign in";
+    $("authPass").setAttribute("autocomplete", m==="in" ? "current-password" : "new-password");
+  }
+
+  async function doAuth(){
+    const email = $("authEmail").value.trim();
+    const pass = $("authPass").value;
+    const msg = $("authMsg");
+    if(!email || !pass){ msg.className="msg err"; msg.textContent="Enter your email and password."; return; }
+    if(pass.length < 6){ msg.className="msg err"; msg.textContent="Password must be at least 6 characters."; return; }
+    if(!SB){ msg.className="msg err"; msg.textContent="Connect to the internet to sign in."; return; }
+    $("authSubmit").disabled = true;
+    msg.className="msg"; msg.textContent="Working…";
+    try{
+      if(authMode==="in"){
+        const { error } = await SB.auth.signInWithPassword({ email, password:pass });
+        if(error) throw error;
+        // onAuthStateChange closes the sheet and kicks off the sync
+      } else {
+        const { data, error } = await SB.auth.signUp({ email, password:pass });
+        if(error) throw error;
+        if(!data.session){
+          msg.className="msg ok";
+          msg.textContent="Account created — check your email to confirm, then sign in.";
+          setAuthMode("in");
+        }
+      }
+    }catch(e){
+      msg.className="msg err"; msg.textContent = (e && e.message) ? e.message : "Something went wrong.";
+    }finally{
+      $("authSubmit").disabled = false;
+    }
+  }
+
+  $("authSubmit").addEventListener("click", doAuth);
+  $("authPass").addEventListener("keydown", e=>{ if(e.key==="Enter") doAuth(); });
+  $("authToggle").addEventListener("click", ()=> setAuthMode(authMode==="in" ? "up" : "in"));
+  $("authClose").addEventListener("click", closeAuth);
+
+  /* ===================== Account UI ===================== */
+  function openAcct(){
+    $("acctEmail").textContent = session ? session.user.email : "";
+    setSync(syncState);
+    $("acctCount").textContent = state.sets.length + state.resets.length;
+    $("acctOverlay").classList.add("show");
+  }
+  $("acctBtn").innerHTML = PERSON + '<span class="dot"></span>';
+  $("acctBtn").addEventListener("click", ()=>{ if(session) openAcct(); else openAuth(); });
+  $("acctClose").addEventListener("click", ()=> $("acctOverlay").classList.remove("show"));
+  $("acctSync").addEventListener("click", ()=> reconcile());
+  $("acctSignOut").addEventListener("click", async ()=>{
+    if(SB) await SB.auth.signOut();
+    $("acctOverlay").classList.remove("show");
+    toast("Signed out");
+  });
+
+  /* ===================== Init ===================== */
+  function initCloud(){
+    if(!SB){ setSync("local"); return; }
+    // onAuthStateChange fires immediately with the persisted session on load,
+    // then again on every sign-in / sign-out.
+    SB.auth.onAuthStateChange((_event, sess)=>{
+      session = sess || null;
+      if(session){
+        closeAuth();
+        setSync("syncing");
+        reconcile();
+        subscribeRealtime();
+      } else {
+        if(realtimeChan){ SB.removeChannel(realtimeChan); realtimeChan = null; }
+        setSync("local");
+      }
+    });
+  }
+  // re-sync when the network returns or the app comes back to the foreground
+  window.addEventListener("online", ()=>{ if(session) reconcile(); });
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden) return;
+    checkMidnight();
+    if(session) reconcile();
+  });
+
   applyTheme();
   dayPick.value = todayKey();
   monthPick.value = todayKey().slice(0,7);
+  setAuthMode("in");
   renderBank(false);
+  setSync("local");
+  initCloud();
 })();
 </script>
 </body>
