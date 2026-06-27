@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Node / Capacitor (added when wrapping for iOS)
+node_modules/
+dist/
+
+# Xcode / iOS build artifacts
+ios/App/Pods/
+ios/App/build/
+*.xcuserstate
+DerivedData/
+
+# Editor
+.vscode/
+.idea/
