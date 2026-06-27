@@ -341,10 +341,10 @@
       if(raw && Array.isArray(raw.sets)){
         // migrate older resets stored as bare timestamps -> {id, ts}
         const resets = (raw.resets||[]).map(r => (typeof r === "number") ? {id:"reset-"+r, ts:r} : r);
-        return {sets:raw.sets, resets, dark:!!raw.dark};
+        return {sets:raw.sets, resets, dark:!!raw.dark, owner: raw.owner || null};
       }
     }catch(e){}
-    return {sets:[], resets:[], dark: window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches};
+    return {sets:[], resets:[], owner:null, dark: window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches};
   }
   function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
   function uid(prefix){ return prefix+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,8); }
@@ -654,12 +654,23 @@
     SB.auth.onAuthStateChange((_event, sess)=>{
       session = sess || null;
       if(session){
+        const uidNow = session.user.id;
+        // If this device's cache belongs to a DIFFERENT account, drop it so accounts never
+        // bleed into each other. (owner === null = anonymous data → adopt it for this user.)
+        if(state.owner && state.owner !== uidNow){ state.sets = []; state.resets = []; }
+        state.owner = uidNow;
+        save();
+        renderAll();        // reflect any wipe immediately
         closeAuth();
         setSync("syncing");
-        reconcile();
+        reconcile();        // pulls this account's data, pushes only its own local-only entries
         subscribeRealtime();
       } else {
         if(realtimeChan){ SB.removeChannel(realtimeChan); realtimeChan = null; }
+        // Signed out: clear the synced cache so the next account starts from a clean slate.
+        state.sets = []; state.resets = []; state.owner = null;
+        save();
+        renderAll();
         setSync("local");
       }
     });
