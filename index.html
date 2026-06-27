@@ -289,7 +289,7 @@
   <div class="sheet">
     <h2 id="authTitle">Welcome back</h2>
     <p class="sub2" id="authSub">Sign in to keep your push-ups consistent across all your devices.</p>
-    <input class="in" id="authEmail" type="email" inputmode="email" autocomplete="email" placeholder="Email" />
+    <input class="in" id="authUser" type="text" inputmode="text" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username" placeholder="Username" />
     <input class="in" id="authPass" type="password" autocomplete="current-password" placeholder="Password" />
     <div class="msg" id="authMsg"></div>
     <button class="btn-primary" id="authSubmit">Sign in</button>
@@ -582,7 +582,7 @@
 
   /* ===================== Auth UI ===================== */
   let authMode = "in";
-  function openAuth(){ $("authOverlay").classList.add("show"); $("authEmail").focus(); }
+  function openAuth(){ $("authOverlay").classList.add("show"); $("authUser").focus(); }
   function closeAuth(){ $("authOverlay").classList.remove("show"); $("authMsg").textContent=""; $("authMsg").className="msg"; $("authPass").value=""; }
   function setAuthMode(m){
     authMode = m;
@@ -594,13 +594,19 @@
     $("authPass").setAttribute("autocomplete", m==="in" ? "current-password" : "new-password");
   }
 
+  // Supabase auth is email-based; we map a username to a synthetic address so users only ever
+  // deal with a username + password. (Email confirmation must be OFF in the Supabase dashboard.)
+  const USERNAME_DOMAIN = "@mashq.app";
+
   async function doAuth(){
-    const email = $("authEmail").value.trim();
+    const username = $("authUser").value.trim().toLowerCase();
     const pass = $("authPass").value;
     const msg = $("authMsg");
-    if(!email || !pass){ msg.className="msg err"; msg.textContent="Enter your email and password."; return; }
+    if(!username || !pass){ msg.className="msg err"; msg.textContent="Enter a username and password."; return; }
+    if(!/^[a-z0-9._-]{3,}$/.test(username)){ msg.className="msg err"; msg.textContent="Username: 3+ characters, letters/numbers/._- only."; return; }
     if(pass.length < 6){ msg.className="msg err"; msg.textContent="Password must be at least 6 characters."; return; }
     if(!SB){ msg.className="msg err"; msg.textContent="Connect to the internet to sign in."; return; }
+    const email = username + USERNAME_DOMAIN;
     $("authSubmit").disabled = true;
     msg.className="msg"; msg.textContent="Working…";
     try{
@@ -612,8 +618,9 @@
         const { data, error } = await SB.auth.signUp({ email, password:pass });
         if(error) throw error;
         if(!data.session){
-          msg.className="msg ok";
-          msg.textContent="Account created — check your email to confirm, then sign in.";
+          // Only happens if "Confirm email" is still ON in Supabase — turn it off for username login.
+          msg.className="msg err";
+          msg.textContent="Turn off “Confirm email” in Supabase to use username login.";
           setAuthMode("in");
         }
       }
@@ -631,7 +638,7 @@
 
   /* ===================== Account UI ===================== */
   function openAcct(){
-    $("acctEmail").textContent = session ? session.user.email : "";
+    $("acctEmail").textContent = session ? ("@" + session.user.email.split("@")[0]) : "";
     setSync(syncState);
     $("acctCount").textContent = state.sets.length + state.resets.length;
     $("acctOverlay").classList.add("show");
